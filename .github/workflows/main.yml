@@ -10,42 +10,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code 
+      - name: Checkout source code
         uses: actions/checkout@v3
-
-      # BUILD + PUSH A ACR
-      - name: ACR build
-        id: build-push-acr
-        uses: azure/acr-build@v1
-        with:
-          service_principal: ${{ secrets.service_principal }}
-          service_principal_password: ${{ secrets.service_principal_password }}
-          tenant: ${{ secrets.tenant }}
-          registry: ${{ secrets.REGISTRY }}
-          repository: ${{ secrets.REPOSITORY }}
-          image: azure-vote-front
-          folder: azure-vote
-          branch: main
-          tag: ${{ github.sha }}
 
       # LOGIN A AZURE
       - name: Azure login
-        id: login
-        uses: azure/login@v1.4.3
+        uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # CONTEXTO AKS
+      # LOGIN A ACR
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.REGISTRY }}
+
+      # BUILD IMAGE
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.REGISTRY }}.azurecr.io/${{ secrets.REPOSITORY }}/azure-vote-front:${{ github.sha }} azure-vote
+
+      # PUSH IMAGE
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.REGISTRY }}.azurecr.io/${{ secrets.REPOSITORY }}/azure-vote-front:${{ github.sha }}
+
+      # SET AKS CONTEXT
       - name: Set AKS context
-        id: set-context
         uses: azure/aks-set-context@v3
         with:
           resource-group: ${{ secrets.RESOURCE_GROUP }}
           cluster-name: ${{ secrets.CLUSTER_NAME }}
-
-      # KUBECTL
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
 
       # DEPLOY
       - name: Deploy to AKS
@@ -55,4 +48,3 @@ jobs:
           manifests: |
             azure-vote-all-in-one-redis.yaml
           images: ${{ secrets.REGISTRY }}.azurecr.io/${{ secrets.REPOSITORY }}/azure-vote-front:${{ github.sha }}
-          pull-images: false
